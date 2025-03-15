@@ -151,6 +151,13 @@ class Post extends Model
 ---
 
 ## **🧪 Running Tests**
+
+To run the tests, use the following command:
+
+```bash
+./vendor/bin/phpunit --configuration phpunit.xml
+```
+
 Using **PestPHP**, you can test the relationships like this:
 
 ```php
@@ -207,3 +214,7 @@ $activePost = $user->posts()->actives()->first();
 
 ## **🎉 Conclusion**
 This approach enhances maintainability and improves readability in Laravel projects. 🚀 Happy coding!
+    
+## Test File
+
+To directly view the test file, click [here](https://github.com/LLyamk3i/laravel-relation-hup/blob/main/tests/Feature/UserTest.php).
