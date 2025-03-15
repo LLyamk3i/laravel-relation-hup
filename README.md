@@ -1,66 +1,209 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+### **Laravel Relationship Hub Trick**
+A structured way to organize and call relationships dynamically using an intermediary **relationship hub**.
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## **🚀 Overview**
+This package introduces a **relationship hub** in Laravel that centralizes relationships under a dedicated class. It also enables **method forwarding** using a custom trait to avoid key mismatches and make relationship calls more readable.
 
-## About Laravel
+## **🛠 Features**
+✅ Encapsulates relationships inside a dedicated hub class  
+✅ Uses **method forwarding** for dynamic relationship resolution  
+✅ Eliminates key mismatches using an **enum-based approach**  
+✅ Supports **HasMany** and **HasOne** relationships dynamically  
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## **📦 Installation**
+```bash
+composer install
+php artisan migrate
+```
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## **🔧 Implementation**
+### **1️⃣ Define the Enum for Relationships**
+```php
+<?php
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+namespace App\Enums;
 
-## Learning Laravel
+enum PostRelations: string {
+    case LIST = 'posts/list';
+    case LATEST = 'posts/latest';
+    case OLDER = 'posts/older';
+    case ACTIVES = 'posts/actives';
+}
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+---
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+### **2️⃣ Create a Trait for Forwarding Relationship Calls**
+```php
+<?php
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+namespace App\Concerns\Eloquent;
 
-## Laravel Sponsors
+trait ForwardToHubRelationshipMethod
+{
+    public function __call($method, $parameters)
+    {
+        if (! str_contains($method, '/')) {
+            return parent::__call(method: $method, parameters: $parameters);
+        }
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+        [$hub, $relationship] = explode('/', $method);
 
-### Premium Partners
+        if (! method_exists($this, $hub)) {
+            throw new \BadMethodCallException(\sprintf('Hub method %s does not exist', $hub));
+        }
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+        $object = \call_user_func(callback: [$this, $hub]);
 
-## Contributing
+        return $this->forwardCallTo(object: $object, method: $relationship, parameters: $parameters);
+    }
+}
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+### **3️⃣ Define the `PostRelationships` Hub Class**
+```php
+<?php
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+namespace App\Models\User;
 
-## Security Vulnerabilities
+use App\Models\Post;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+final readonly class PostRelationships
+{
+    public function __construct(private readonly User $model) {}
 
-## License
+    public function list(): HasMany
+    {
+        return $this->model->hasMany(related: Post::class);
+    }
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+    public function latest(): HasOne
+    {
+        return $this->model->hasOne(related: Post::class)->latestOfMany();
+    }
+
+    public function older(): HasOne
+    {
+        return $this->model->hasOne(related: Post::class)->oldestOfMany();
+    }
+
+    public function actives(): HasOne
+    {
+        return $this->model->hasOne(related: Post::class)->where('enabled', true);
+    }
+}
+```
+
+---
+
+### **4️⃣ Update the `User` Model**
+```php
+<?php
+
+namespace App\Models;
+
+use App\Concerns\Eloquent\ForwardToHubRelationshipMethod;
+use App\Models\User\PostRelationships;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+
+class User extends Authenticatable
+{
+    use ForwardToHubRelationshipMethod;
+
+    public function posts(): PostRelationships
+    {
+        return new PostRelationships(model: $this);
+    }
+}
+```
+
+---
+
+### **5️⃣ Update the `Post` Model**
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Post extends Model
+{
+    protected $fillable = ['title', 'content', 'slug', 'enabled', 'user_id'];
+
+    protected $casts = [
+        'enabled' => 'boolean',
+    ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(related: User::class);
+    }
+}
+```
+
+---
+
+## **🧪 Running Tests**
+Using **PestPHP**, you can test the relationships like this:
+
+```php
+<?php
+
+use App\Models\Post;
+use App\Models\User;
+use App\Enums\PostRelations;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
+
+it('has many posts', function () {
+    $user = User::factory()->create();
+    Post::factory()->count(3)->create(['user_id' => $user->id]);
+
+    expect(User::with(PostRelations::LIST->value)->first()->getRelation(PostRelations::LIST->value))->toHaveCount(3);
+});
+
+it('has latest post', function () {
+    $user = User::factory()->create();
+    $latestPost = Post::factory()->create(['user_id' => $user->id, 'created_at' => now()]);
+
+    expect(User::with(PostRelations::LATEST->value)->first()->getRelation(PostRelations::LATEST->value))->toBeInstanceOf(Post::class);
+});
+```
+
+---
+
+## **💡 How It Works**
+- The **`PostRelationships`** class encapsulates user-post relationships.
+- The **`ForwardToHubRelationshipMethod`** trait dynamically forwards method calls like `posts/list` to `PostRelationships::list()`.
+- The **enum `PostRelations`** ensures relationship keys are consistent and error-free.
+
+---
+
+## **🎯 Benefits**
+✔ **Cleaner & Organized** – Keeps relationships in one place  
+✔ **Prevents Key Mismatches** – Uses enums instead of string-based keys  
+✔ **More Readable Queries** – Relationship calls are clear & logical  
+
+---
+
+## **📜 Example Usage**
+```php
+$user = User::first();
+$posts = $user->posts()->list()->get();
+$latestPost = $user->posts()->latest()->first();
+$oldestPost = $user->posts()->older()->first();
+$activePost = $user->posts()->actives()->first();
+```
+
+---
+
+## **🎉 Conclusion**
+This approach enhances maintainability and improves readability in Laravel projects. 🚀 Happy coding!
